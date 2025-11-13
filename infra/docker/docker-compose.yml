@@ -1,0 +1,97 @@
+version: "3.9"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: matrim_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-matrim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-matrim_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-matrim_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-matrim} -d ${POSTGRES_DB:-matrim_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: matrim_redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: matrim_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-adminadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    container_name: matrim_api
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-matrim}:${POSTGRES_PASSWORD:-matrim_pw}@db:5432/${POSTGRES_DB:-matrim_db}
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-adminadmin}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
+    container_name: matrim_web
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-8000}
+      NODE_ENV: production
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+volumes:
+  db_data:
+  redis_data:
+  minio_data:

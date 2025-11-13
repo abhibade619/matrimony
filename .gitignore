@@ -1,0 +1,19 @@
+# general
+.DS_Store
+node_modules
+dist
+build
+.env
+.env.*
+
+# python
+__pycache__/
+.venv/
+
+# docker
+infra/docker/.env
+
+# nextjs
+.apps/
+.next/
+out/
