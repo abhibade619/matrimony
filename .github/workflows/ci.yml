@@ -24,6 +24,9 @@ jobs:
       # 3) Enable corepack so pnpm is available
       - name: Enable corepack (pnpm)
         run: corepack enable
+      - name: Install pnpm 9
+        run: corepack prepare pnpm@9.0.0 --activate
+
 
       # 4) Install all JS dependencies for the monorepo
       - name: Install deps
