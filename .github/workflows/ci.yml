@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+
+jobs:
+  web:
+    name: Web (Next.js)
+    runs-on: ubuntu-latest
+    steps:
+      # 1) Checkout code
+      - uses: actions/checkout@v4
+
+      # 2) Install Node and enable pnpm cache
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      # 3) Enable corepack so pnpm is available
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+
+      # 4) Install all JS dependencies for the monorepo
+      - name: Install deps
+        run: pnpm install
+
+      # 5) Lint the web app
+      - name: Lint
+        run: pnpm -C apps/web lint
+
+      # 6) Typecheck the web app
+      - name: Typecheck
+        run: pnpm -C apps/web typecheck
+
+      # 7) Build the web app
+      - name: Build
+        run: pnpm -C apps/web build
+
+  api:
+    name: API (FastAPI)
+    runs-on: ubuntu-latest
+    steps:
+      # 1) Checkout code
+      - uses: actions/checkout@v4
+
+      # 2) Install Python 3.11
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 3) Install FastAPI dependencies + mypy
+      - name: Install deps
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install mypy==1.11.2 types-requests==2.32.0.20241016
+
+      # 4) Type-check the API code
+      - name: Type-check (mypy)
+        working-directory: apps/api
+        run: mypy app
+
+      # 5) Make sure the app imports without crashing
+      - name: Smoke import
+        working-directory: apps/api
+        run: python -c "import importlib; importlib.import_module('app.main')"
